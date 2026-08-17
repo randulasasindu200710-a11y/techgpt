@@ -1,9 +1,5 @@
 streamlit
-langchain
-langchain-openai
-langchain-community
-faiss-cpu
+openai
 pypdf
-sentence-transformers
 beautifulsoup4
 youtube-transcript-api
