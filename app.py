@@ -1,13 +1,14 @@
 import os
+import glob
 import streamlit as st
-from pypdf import PdfReader
-from bs4 import BeautifulSoup
-import urllib.request
-from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
+from duckduckgo_search import DDGS
+from pypdf import PdfReader
 
-st.set_page_config(page_title="A/L Tech AI Tutor", page_icon="🎓", layout="wide")
-st.title("🎓 A/L Technology Multi-Source AI Tutor")
+# Web Page එක Gemini / ChatGPT Chat අතුරුමුහුණතක් ලෙස සැකසීම
+st.set_page_config(page_title="A/L Tech Smart AI Tutor", page_icon="🎓", layout="centered")
+st.title("🎓 A/L Technology AI Tutor")
+st.caption("අන්තර්ජාලය, NIE තොරතුරු සහ විෂය නිර්දේශ සටහන් ඇසුරෙන් ස්වයංක්‍රීයව පිළිතුරු සපයයි.")
 
 # Streamlit Secrets හෝ Sidebar මගින් API Key එක ලබා ගැනීම
 if "OPENROUTER_API_KEY" in st.secrets:
@@ -15,79 +16,90 @@ if "OPENROUTER_API_KEY" in st.secrets:
 else:
     api_key = st.sidebar.text_input("OpenRouter API Key එක ඇතුළත් කරන්න:", type="password")
 
-if api_key:
-    # OpenRouter Client එක සෑදීම
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-    )
+# GitHub Repo එකේ 'data' folder එකේ ඇති PDFs තිබේ නම් ඒවා Auto-read කිරීම
+@st.cache_data
+def load_local_pdfs():
+    pdf_text = ""
+    pdf_files = glob.glob("data/*.pdf")
+    for file in pdf_files:
+        try:
+            reader = PdfReader(file)
+            for page in reader.pages:
+                pdf_text += page.extract_text() + "\n"
+        except Exception:
+            pass
+    return pdf_text
 
-    col1, col2 = st.columns([1, 1])
-    extracted_text = ""
+local_pdf_context = load_local_pdfs()
 
-    with col1:
-        st.subheader("📁 1. PDF සටහන් Upload කරන්න")
-        uploaded_files = st.file_uploader("A/L Tech PDF / Past Papers", type="pdf", accept_multiple_files=True)
-        if uploaded_files:
-            for uploaded_file in uploaded_files:
-                reader = PdfReader(uploaded_file)
-                for page in reader.pages:
-                    extracted_text += page.extract_text() + "\n"
-            st.success("PDF දත්ත කියවන ලදී!")
+# AI එක විසින්ම අන්තර්ජාලයෙන් (Google / NIE / YouTube notes) ස්වයංක්‍රීයව සෙවීම
+def search_web_knowledge(query):
+    search_results = ""
+    try:
+        with DDGS() as ddgs:
+            # Sri Lanka A/L Tech විෂයට අදාළව අන්තර්ජාලය සෙවීම
+            results = list(ddgs.text(f"Sri Lanka AL Technology NIE {query}", max_results=5))
+            for r in results:
+                search_results += f"Title: {r['title']}\nSnippet: {r['body']}\nURL: {r['href']}\n\n"
+    except Exception:
+        search_results = "Web search automated fetching failed."
+    return search_results
 
-    with col2:
-        st.subheader("🌐 2. Web Links සහ 🎥 3. YouTube Links")
-        web_url = st.text_input("NIE හෝ වෙනත් Web Page Link එකක්:")
-        yt_url = st.text_input("YouTube Video Link එකක්:")
+# Chat History සකස් කිරීම
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-        if st.button("Links වලින් දත්ත ලබාගන්න"):
-            if web_url:
-                try:
-                    req = urllib.request.Request(web_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    html = urllib.request.urlopen(req).read()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    extracted_text += "\n" + soup.get_text()
-                    st.success("Web Page එකෙන් දත්ත එකතු විය!")
-                except Exception as e:
-                    st.error(f"Web Link Error: {e}")
+# පැරණි සංවාද UI එකේ පෙන්වීම
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
 
-            if yt_url:
-                try:
-                    video_id = yt_url.split("v=")[-1].split("&")[0]
-                    transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                    yt_text = " ".join([t['text'] for t in transcript])
-                    extracted_text += "\n" + yt_text
-                    st.success("YouTube Video එකෙන් Transcripts එකතු විය!")
-                except Exception as e:
-                    st.error(f"YouTube Error (Subtitles තිබිය යුතුය): {e}")
+# පරිශීලකයා ප්‍රශ්නයක් ඇසූ විට
+if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙතැනින් අසන්න..."):
+    if not api_key:
+        st.error("කරුණාකර API Key එක සකසන්න.")
+    else:
+        # පරිශීලකයාගේ ප්‍රශ්නය Chat එකට එකතු කිරීම
+        st.session_state.messages.append({"role": "user", "content": user_query})
+        st.chat_message("user").write(user_query)
 
-    st.divider()
-    user_query = st.text_input("A/L Tech ප්‍රශ්නය මෙතැනින් අසන්න:")
+        with st.chat_message("assistant"):
+            with st.spinner("AI එක විසින් NIE සහ අන්තර්ජාල තොරතුරු ස්වයංක්‍රීයව පරීක්ෂා කරමින් පවතියි..."):
+                
+                # 1. ස්වයංක්‍රීයව Web Search කිරීම
+                live_web_context = search_web_knowledge(user_query)
 
-    if user_query:
-        if not extracted_text:
-            st.warning("කරුණාකර ප්‍රශ්නය ඇසීමට පෙර අවම වශයෙන් එක PDF එකක්, Web Link එකක් හෝ YouTube Link එකක් ලබා දෙන්න.")
-        else:
-            with st.spinner("Gemini AI මගින් පිළිතුර සකස් කරමින් පවතී..."):
+                # 2. Prompt එක සකස් කිරීම
                 prompt = f"""
-                ඔබ ශ්‍රී ලංකාවේ A/L Technology (ET, BST, SFT) විෂයයන් පිළිබඳ ප්‍රවීණ ගුරුවරයෙකි.
-                පහත ලබා දී ඇති විෂය කරුණු (Context) පමණක් භාවිත කරමින් සිසුවාගේ ප්‍රශ්නයට අදාළව විභාග ලකුණු දීමේ පටිපාටියට (Marking Scheme) අනුව පැහැදිලි පිළිතුරක් ලබා දෙන්න.
+                ඔබ ශ්‍රී ලංකාවේ A/L Technology (ET, BST, SFT) විෂයයන් පිළිබඳ ප්‍රවීණ AI ගුරුවරයෙකි.
+                පහත දක්වා ඇති අන්තර්ජාලයෙන් ස්වයංක්‍රීයව සොයාගත් NIE/විෂය කරුණු (Web Results) සහ පෙළපොත් සටහන් (Local PDFs) භාවිත කරමින් සිසුවාගේ ප්‍රශ්නයට A/L විභාග ලකුණු දීමේ පටිපාටියට (Marking Scheme) අනුව නිවැරදි සිංහලෙන් පිළිතුර ලබා දෙන්න.
 
-                Context:
-                {extracted_text[:10000]}
+                --- අන්තර්ජාලයෙන් ස්වයංක්‍රීයව සොයාගත් තොරතුරු ---
+                {live_web_context}
 
-                Question:
+                --- ස්වයංක්‍රීය පෙළපොත් සටහන් (තිබේ නම්) ---
+                {local_pdf_context[:4000]}
+
+                --- සිසුවාගේ ප්‍රශ්නය ---
                 {user_query}
                 """
 
                 try:
+                    client = OpenAI(
+                        base_url="https://openrouter.ai/api/v1",
+                        api_key=api_key,
+                    )
                     response = client.chat.completions.create(
                         model="google/gemini-flash-1.5",
                         messages=[{"role": "user", "content": prompt}]
                     )
-                    st.subheader("💡 පිළිතුර:")
-                    st.write(response.choices[0].message.content)
+                    answer = response.choices[0].message.content
+                    
+                    st.write(answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+
+                    # AI එක සොයාගත් මූලාශ්‍ර බලාගැනීමට
+                    with st.expander("AI එක ස්වයංක්‍රීයව සෙවූ මූලාශ්‍ර (Auto-searched Context)"):
+                        st.text(live_web_context)
+
                 except Exception as e:
-                    st.error(f"API Error: {e}")
-else:
-    st.warning("කරුණාකර OpenRouter API Key එක සකසන්න.")
+                    st.error(f"Error: {e}")
