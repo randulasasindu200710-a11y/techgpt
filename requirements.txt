@@ -1,5 +1,4 @@
 streamlit
 openai
+duckduckgo-search
 pypdf
-beautifulsoup4
-youtube-transcript-api
