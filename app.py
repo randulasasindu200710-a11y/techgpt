@@ -44,19 +44,12 @@ def search_web_knowledge(query):
         search_results = "Web search automated fetching failed."
     return search_results
 
-# Chat History සැකසීම
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-# User Input එකක් ලබාගත් විට
+# User Input එකක් ලබාගත් විට (පැරණි ප්‍රශ්න ඉවත් වී අලුත් ප්‍රශ්නය පමණක් පෙන්වයි)
 if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙතැනින් අසන්න..."):
     if not api_key:
         st.error("කරුණාකර OpenRouter API Key එක සකසන්න.")
     else:
-        st.session_state.messages.append({"role": "user", "content": user_query})
+        # වත්මන් ප්‍රශ්නය පෙන්වීම
         st.chat_message("user").write(user_query)
 
         with st.chat_message("assistant"):
@@ -83,7 +76,6 @@ if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙ�
                         base_url="https://openrouter.ai/api/v1",
                         api_key=api_key,
                     )
-                    # DeepSeek Model එක භාවිත කිරීම
                     response = client.chat.completions.create(
                         model="deepseek/deepseek-chat",
                         messages=[{"role": "user", "content": prompt}]
@@ -91,7 +83,6 @@ if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙ�
                     answer = response.choices[0].message.content
                     
                     st.write(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
 
                     with st.expander("AI එක ස්වයංක්‍රීයව සෙවූ මූලාශ්‍ර (Auto-searched Context)"):
                         st.text(live_web_context)
