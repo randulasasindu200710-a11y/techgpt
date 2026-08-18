@@ -28,21 +28,11 @@ def load_local_pdfs():
                 extracted = page.extract_text()
                 if extracted:
                     pdf_text += extracted + "\n"
-        except Exception as e:
+        except Exception:
             pass
     return pdf_text
 
 local_pdf_context = load_local_pdfs()
-
-# Sidebar එකේ PDF එකෙන් කියවාගත් Text එක පෙන්වීම (Debug කරගැනීමට)
-with st.sidebar:
-    st.subheader("📁 Upload කළ PDF තත්ත්වය")
-    if local_pdf_context.strip():
-        st.success(f"PDF සාර්ථකව කියවන ලදී! (අකුරු අක්ෂර ප්‍රමාණය: {len(local_pdf_context)})")
-        with st.expander("කියවාගත් Text කොටස බලන්න"):
-            st.text(local_pdf_context[:1500]) # මුල් අකුරු 1500 පෙන්වයි
-    else:
-        st.warning("data/ folder එකේ කියවිය හැකි PDF හමු නොවීය, නැතහොත් PDF එකේ අකුරු Image ලෙස ඇත.")
 
 # DuckDuckGo හරහා අන්තර්ජාලයෙන් NIE සහ Subject කරුණු සෙවීම
 def search_web_knowledge(query):
@@ -56,13 +46,26 @@ def search_web_knowledge(query):
         search_results = "Web search automated fetching failed."
     return search_results
 
+# Chat History සැකසීම (පෙර ප්‍රශ්න සහ පිළිතුරු රඳවා තබා ගැනීමට)
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# සංවාද ඉතිහාසය තිරයේ පෙන්වීම
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+
 # User Input එකක් ලබාගත් විට
 if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙතැනින් අසන්න..."):
     if not api_key:
         st.error("කරුණාකර OpenRouter API Key එක සකසන්න.")
     else:
-        st.chat_message("user").write(user_query)
+        # පරිශීලකයාගේ ප්‍රශ්නය Chat History එකට එකතු කර තිරයේ පෙන්වීම
+        st.session_state.messages.append({"role": "user", "content": user_query})
+        with st.chat_message("user"):
+            st.write(user_query)
 
+        # AI පිළිතුර සකස් කිරීම
         with st.chat_message("assistant"):
             with st.spinner("DeepSeek AI එක මගින් පිළිතුර සකස් කරමින් පවතියි..."):
                 
@@ -94,12 +97,9 @@ if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙ�
                     answer = response.choices[0].message.content
                     
                     st.write(answer)
-
-                    with st.expander("AI එක භාවිතා කළ මූලාශ්‍ර (Context)"):
-                        st.write("**PDF සටහන් වලින් භාවිත කළ කොටස්:**")
-                        st.text(local_pdf_context[:1000] if local_pdf_context else "PDF සටහන් හමු නොවීය.")
-                        st.write("**අන්තර්ජාල මූලාශ්‍ර:**")
-                        st.text(live_web_context)
+                    
+                    # AI පිළිතුර Chat History එකට එකතු කිරීම
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
 
                 except Exception as e:
                     st.error(f"Error: {e}")
