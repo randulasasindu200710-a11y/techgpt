@@ -25,12 +25,24 @@ def load_local_pdfs():
         try:
             reader = PdfReader(file)
             for page in reader.pages:
-                pdf_text += page.extract_text() + "\n"
-        except Exception:
+                extracted = page.extract_text()
+                if extracted:
+                    pdf_text += extracted + "\n"
+        except Exception as e:
             pass
     return pdf_text
 
 local_pdf_context = load_local_pdfs()
+
+# Sidebar එකේ PDF එකෙන් කියවාගත් Text එක පෙන්වීම (Debug කරගැනීමට)
+with st.sidebar:
+    st.subheader("📁 Upload කළ PDF තත්ත්වය")
+    if local_pdf_context.strip():
+        st.success(f"PDF සාර්ථකව කියවන ලදී! (අකුරු අක්ෂර ප්‍රමාණය: {len(local_pdf_context)})")
+        with st.expander("කියවාගත් Text කොටස බලන්න"):
+            st.text(local_pdf_context[:1500]) # මුල් අකුරු 1500 පෙන්වයි
+    else:
+        st.warning("data/ folder එකේ කියවිය හැකි PDF හමු නොවීය, නැතහොත් PDF එකේ අකුරු Image ලෙස ඇත.")
 
 # DuckDuckGo හරහා අන්තර්ජාලයෙන් NIE සහ Subject කරුණු සෙවීම
 def search_web_knowledge(query):
@@ -44,28 +56,27 @@ def search_web_knowledge(query):
         search_results = "Web search automated fetching failed."
     return search_results
 
-# User Input එකක් ලබාගත් විට (පැරණි ප්‍රශ්න ඉවත් වී අලුත් ප්‍රශ්නය පමණක් පෙන්වයි)
+# User Input එකක් ලබාගත් විට
 if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙතැනින් අසන්න..."):
     if not api_key:
         st.error("කරුණාකර OpenRouter API Key එක සකසන්න.")
     else:
-        # වත්මන් ප්‍රශ්නය පෙන්වීම
         st.chat_message("user").write(user_query)
 
         with st.chat_message("assistant"):
-            with st.spinner("DeepSeek AI එක මගින් පිළිතුර පරීක්ෂා කරමින් පවතියි..."):
+            with st.spinner("DeepSeek AI එක මගින් පිළිතුර සකස් කරමින් පවතියි..."):
                 
                 live_web_context = search_web_knowledge(user_query)
 
                 prompt = f"""
                 ඔබ ශ්‍රී ලංකාවේ A/L Technology (ET, BST, SFT) විෂයයන් පිළිබඳ ප්‍රවීණ AI ගුරුවරයෙකි.
-                පහත දක්වා ඇති අන්තර්ජාලයෙන් ස්වයංක්‍රීයව සොයාගත් NIE/විෂය කරුණු (Web Results) සහ පෙළපොත් සටහන් (Local PDFs) භාවිත කරමින් සිසුවාගේ ප්‍රශ්නයට A/L විභාග ලකුණු දීමේ පටිපාටියට (Marking Scheme) අනුව නිවැරදි සිංහලෙන් පිළිතුර ලබා දෙන්න.
+                පහත දක්වා ඇති පෙළපොත් සටහන් (Local PDFs) සහ අන්තර්ජාලයෙන් සොයාගත් තොරතුරු (Web Results) ප්‍රධාන වශයෙන් භාවිත කරමින් සිසුවාගේ ප්‍රශ්නයට A/L විභාග ලකුණු දීමේ පටිපාටියට (Marking Scheme) අනුව නිවැරදි සිංහලෙන් පිළිතුර ලබා දෙන්න.
 
-                --- අන්තර්ජාලයෙන් ස්වයංක්‍රීයව සොයාගත් තොරතුරු ---
+                --- අපගේ පෙළපොත් / PDF සටහන් ---
+                {local_pdf_context[:6000]}
+
+                --- අන්තර්ජාලයෙන් සොයාගත් තොරතුරු ---
                 {live_web_context}
-
-                --- ස්වයංක්‍රීය පෙළපොත් සටහන් (තිබේ නම්) ---
-                {local_pdf_context[:4000]}
 
                 --- සිසුවාගේ ප්‍රශ්නය ---
                 {user_query}
@@ -84,7 +95,10 @@ if user_query := st.chat_input("A/L Technology ප්‍රශ්නය මෙ�
                     
                     st.write(answer)
 
-                    with st.expander("AI එක ස්වයංක්‍රීයව සෙවූ මූලාශ්‍ර (Auto-searched Context)"):
+                    with st.expander("AI එක භාවිතා කළ මූලාශ්‍ර (Context)"):
+                        st.write("**PDF සටහන් වලින් භාවිත කළ කොටස්:**")
+                        st.text(local_pdf_context[:1000] if local_pdf_context else "PDF සටහන් හමු නොවීය.")
+                        st.write("**අන්තර්ජාල මූලාශ්‍ර:**")
                         st.text(live_web_context)
 
                 except Exception as e:
